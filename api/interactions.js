@@ -14,20 +14,25 @@ function getRawBody(req) {
     });
 }
 
-module.exports = async (req, res) => {
+async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).send('Method not allowed');
+    }
+
+    const publicKey = process.env.DISCORD_PUBLIC_KEY;
+    if (!publicKey) {
+        return res.status(500).send('DISCORD_PUBLIC_KEY manquante sur Vercel');
     }
 
     const signature = req.headers['x-signature-ed25519'];
     const timestamp = req.headers['x-signature-timestamp'];
     const rawBody = await getRawBody(req);
 
-    const isValid = verifyKey(
+    const isValid = await verifyKey(
         rawBody,
         signature,
         timestamp,
-        process.env.DISCORD_PUBLIC_KEY,
+        publicKey,
     );
 
     if (!isValid) {
@@ -37,7 +42,7 @@ module.exports = async (req, res) => {
     const interaction = JSON.parse(rawBody.toString());
 
     if (interaction.type === InteractionType.PING) {
-        return res.json({ type: InteractionResponseType.PONG });
+        return res.status(200).json({ type: InteractionResponseType.PONG });
     }
 
     if (
@@ -47,11 +52,18 @@ module.exports = async (req, res) => {
         const lieu = interaction.data.options.find((o) => o.name === 'lieu').value;
         const content = batiments[lieu] ?? '❌ Bâtiment inconnu.';
 
-        return res.json({
+        return res.status(200).json({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content },
         });
     }
 
     return res.status(400).json({ error: 'Unknown command' });
+}
+
+module.exports = handler;
+module.exports.config = {
+    api: {
+        bodyParser: false,
+    },
 };
